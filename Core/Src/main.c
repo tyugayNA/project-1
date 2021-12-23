@@ -23,7 +23,7 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include "led.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -43,7 +43,8 @@
 /* Private variables ---------------------------------------------------------*/
 
 /* USER CODE BEGIN PV */
-
+led_parameters xLedRed;
+led_parameters xLedGreen;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -74,7 +75,15 @@ int main(void)
   HAL_Init();
 
   /* USER CODE BEGIN Init */
+	xLedRed.port = led_red_GPIO_Port;
+	xLedRed.pin = led_red_Pin;
+	xLedRed.count = 5;
+	xLedRed.period = 1000;
 
+	xLedGreen.port = led_green_GPIO_Port;
+	xLedGreen.pin = led_green_Pin;
+	xLedGreen.count = 2;
+	xLedGreen.period = 100;
   /* USER CODE END Init */
 
   /* Configure the system clock */

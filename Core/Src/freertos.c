@@ -25,7 +25,8 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include "stdbool.h"
+#include "led.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -45,19 +46,17 @@
 
 /* Private variables ---------------------------------------------------------*/
 /* USER CODE BEGIN Variables */
-
+extern led_parameters xLedRed;
+extern led_parameters xLedGreen;
 /* USER CODE END Variables */
 osThreadId defaultTaskHandle;
-osThreadId blinkLedHandle;
 
 /* Private function prototypes -----------------------------------------------*/
 /* USER CODE BEGIN FunctionPrototypes */
-
+void blinkLedHandle(void *argument);
 /* USER CODE END FunctionPrototypes */
 
 void StartDefaultTask(void const * argument);
-void ledGreen(void const * argument);
-void blinkLedRed(void*);
 
 void MX_FREERTOS_Init(void); /* (MISRA C 2004 rule 8.1) */
 
@@ -108,14 +107,10 @@ void MX_FREERTOS_Init(void) {
   osThreadDef(defaultTask, StartDefaultTask, osPriorityNormal, 0, 128);
   defaultTaskHandle = osThreadCreate(osThread(defaultTask), NULL);
 
-  /* definition and creation of blinkLed */
-  osThreadDef(blinkLed, ledGreen, osPriorityNormal, 0, 128);
-  blinkLedHandle = osThreadCreate(osThread(blinkLed), NULL);
-
-  xTaskCreate(blinkLedRed, (char*)"blinkRed", 128, NULL, osPriorityNormal, NULL);
-
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
+  xTaskCreate(blinkLedHandle, (char*)"blinkRed", 128, (void*)&xLedRed, osPriorityNormal, NULL);
+  xTaskCreate(blinkLedHandle, (char*)"blinkGreen", 128, (void*)&xLedGreen, osPriorityNormal, NULL);
   /* USER CODE END RTOS_THREADS */
 
 }
@@ -138,30 +133,20 @@ void StartDefaultTask(void const * argument)
   /* USER CODE END StartDefaultTask */
 }
 
-/* USER CODE BEGIN Header_ledGreen */
-/**
-* @brief Function implementing the blinkLed thread.
-* @param argument: Not used
-* @retval None
-*/
-/* USER CODE END Header_ledGreen */
-void ledGreen(void const * argument)
-{
-  /* USER CODE BEGIN ledGreen */
-  /* Infinite loop */
-  for(;;)
-  {
-    osDelay(1);
-  }
-  /* USER CODE END ledGreen */
-}
-
 /* Private application code --------------------------------------------------*/
 /* USER CODE BEGIN Application */
-void blinkLedRed(void *pvParameters) {
+void blinkLedHandle(void *pvParameters) {
+	led_parameters *xLedParameters;
+	xLedParameters = (led_parameters*)pvParameters;
 	while(1) {
-		HAL_GPIO_TogglePin(led_red_GPIO_Port, led_red_Pin);
-		vTaskDelay(1000);
+		if ((xLedParameters->count) != 0) {
+			(xLedParameters->count)--;
+			HAL_GPIO_WritePin(xLedParameters->port, xLedParameters->pin, GPIO_PIN_SET);
+			vTaskDelay((TickType_t)(xLedParameters->period));
+			HAL_GPIO_WritePin(xLedParameters->port, xLedParameters->pin, GPIO_PIN_RESET);
+			vTaskDelay((TickType_t)(xLedParameters->period));
+		}
 	}
+	vTaskDelete(NULL);
 }
 /* USER CODE END Application */
