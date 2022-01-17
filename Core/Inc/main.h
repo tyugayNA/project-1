@@ -36,7 +36,10 @@ extern "C" {
 
 /* Exported types ------------------------------------------------------------*/
 /* USER CODE BEGIN ET */
-
+typedef struct {
+	uint8_t cnt;
+	uint8_t input_buffer[100];
+} xUART_buf;
 /* USER CODE END ET */
 
 /* Exported constants --------------------------------------------------------*/

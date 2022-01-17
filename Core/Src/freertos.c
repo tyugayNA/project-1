@@ -36,7 +36,7 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-
+#define NUM_OF_MSG_FROM_UART	10
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -48,20 +48,46 @@
 /* USER CODE BEGIN Variables */
 extern led_parameters xLedRed;
 extern led_parameters xLedGreen;
+extern led_parameters xLedBlue;
+extern led_parameters xLedOrange;
+xSemaphoreHandle xCountingButtonSemaphore;
+xSemaphoreHandle xCountingUARTReceiveMsgSemaphore;
+extern xQueueHandle xQueueUARTMsg;
 /* USER CODE END Variables */
 osThreadId defaultTaskHandle;
 
 /* Private function prototypes -----------------------------------------------*/
 /* USER CODE BEGIN FunctionPrototypes */
 void blinkLedHandle(void *argument);
+void ledTask(void *argument);
+void buttonHandle(void *arg);
 /* USER CODE END FunctionPrototypes */
 
 void StartDefaultTask(void const * argument);
 
+extern void MX_USB_DEVICE_Init(void);
 void MX_FREERTOS_Init(void); /* (MISRA C 2004 rule 8.1) */
 
 /* GetIdleTaskMemory prototype (linked to static allocation support) */
 void vApplicationGetIdleTaskMemory( StaticTask_t **ppxIdleTaskTCBBuffer, StackType_t **ppxIdleTaskStackBuffer, uint32_t *pulIdleTaskStackSize );
+
+/* Hook prototypes */
+void vApplicationIdleHook(void);
+
+/* USER CODE BEGIN 2 */
+__weak void vApplicationIdleHook( void )
+{
+   /* vApplicationIdleHook() will only be called if configUSE_IDLE_HOOK is set
+   to 1 in FreeRTOSConfig.h. It will be called on each iteration of the idle
+   task. It is essential that code added to this hook function never attempts
+   to block in any way (for example, call xQueueReceive() with a block time
+   specified, or call vTaskDelay()). If the application makes use of the
+   vTaskDelete() API function (as this demo application does) then it is also
+   important that vApplicationIdleHook() is permitted to return to its calling
+   function, because it is the responsibility of the idle task to clean up
+   memory allocated by the kernel to any task that has since been deleted. */
+}
+/* USER CODE END 2 */
 
 /* USER CODE BEGIN GET_IDLE_TASK_MEMORY */
 static StaticTask_t xIdleTaskTCBBuffer;
@@ -92,6 +118,9 @@ void MX_FREERTOS_Init(void) {
 
   /* USER CODE BEGIN RTOS_SEMAPHORES */
   /* add semaphores, ... */
+	xCountingButtonSemaphore = xSemaphoreCreateCounting(4,0);
+	xCountingUARTReceiveMsgSemaphore = xSemaphoreCreateCounting(10, 0);
+	xQueueUARTMsg = xQueueCreate(NUM_OF_MSG_FROM_UART, sizeof(xUART_buf));
   /* USER CODE END RTOS_SEMAPHORES */
 
   /* USER CODE BEGIN RTOS_TIMERS */
@@ -109,8 +138,15 @@ void MX_FREERTOS_Init(void) {
 
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
-  xTaskCreate(blinkLedHandle, (char*)"blinkRed", 128, (void*)&xLedRed, osPriorityNormal, NULL);
-  xTaskCreate(blinkLedHandle, (char*)"blinkGreen", 128, (void*)&xLedGreen, osPriorityNormal, NULL);
+  //xTaskCreate(blinkLedHandle, (char*)"blinkRed", 128, (void*)&xLedRed, osPriorityNormal, NULL);
+  //xTaskCreate(blinkLedHandle, (char*)"blinkGreen", 128, (void*)&xLedGreen, osPriorityNormal, NULL);
+  //xTaskCreate(blinkLedHandle, (char*)"blinkBlue", 128, (void*)&xLedBlue, osPriorityNormal, NULL);
+
+  xTaskCreate(ledTask, (char*)"blinkRed", 128, (void*)&xLedRed, osPriorityNormal, NULL);
+  xTaskCreate(ledTask, (char*)"blinkGreen", 128, (void*)&xLedGreen, osPriorityNormal, NULL);
+  xTaskCreate(ledTask, (char*)"blinkBlue", 128, (void*)&xLedBlue, osPriorityNormal, NULL);
+  xTaskCreate(ledTask, (char*)"blinkBlue", 128, (void*)&xLedOrange, osPriorityNormal, NULL);
+  xTaskCreate(buttonHandle, (char*)"buttonHandle", 128, NULL, osPriorityNormal, NULL);
   /* USER CODE END RTOS_THREADS */
 
 }
@@ -124,6 +160,8 @@ void MX_FREERTOS_Init(void) {
 /* USER CODE END Header_StartDefaultTask */
 void StartDefaultTask(void const * argument)
 {
+  /* init code for USB_DEVICE */
+  MX_USB_DEVICE_Init();
   /* USER CODE BEGIN StartDefaultTask */
   /* Infinite loop */
   for(;;)
@@ -136,8 +174,14 @@ void StartDefaultTask(void const * argument)
 /* Private application code --------------------------------------------------*/
 /* USER CODE BEGIN Application */
 void blinkLedHandle(void *pvParameters) {
-	led_parameters *xLedParameters;
+	volatile led_parameters *xLedParameters;
 	xLedParameters = (led_parameters*)pvParameters;
+	if (xLedParameters->count == 0) {
+		while(1) {
+			HAL_GPIO_TogglePin(xLedParameters->port, xLedParameters->pin);
+			vTaskDelay((TickType_t)(xLedParameters->period));
+		}
+	}
 	while(1) {
 		if ((xLedParameters->count) != 0) {
 			(xLedParameters->count)--;
@@ -148,5 +192,28 @@ void blinkLedHandle(void *pvParameters) {
 		}
 	}
 	vTaskDelete(NULL);
+}
+
+void ledTask(void *pvParameters) {
+	volatile led_parameters *xLedParameters;
+	xLedParameters = (led_parameters*)pvParameters;
+	while(1) {
+		xSemaphoreTake(xCountingButtonSemaphore, portMAX_DELAY);
+		HAL_GPIO_WritePin(xLedParameters->port, xLedParameters->pin, GPIO_PIN_SET);
+		vTaskDelay((TickType_t)(xLedParameters->period));
+		HAL_GPIO_WritePin(xLedParameters->port, xLedParameters->pin, GPIO_PIN_RESET);
+	}
+	vTaskDelete(NULL);
+}
+
+void buttonHandle(void *param) {
+	while(1) {
+		if (HAL_GPIO_ReadPin(button_GPIO_Port, button_Pin) == GPIO_PIN_SET) {
+			vTaskDelay(75);
+			if (HAL_GPIO_ReadPin(button_GPIO_Port, button_Pin) == GPIO_PIN_RESET) {
+				xSemaphoreGive(xCountingButtonSemaphore);
+			}
+		}
+	}
 }
 /* USER CODE END Application */

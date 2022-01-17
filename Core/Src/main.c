@@ -19,6 +19,9 @@
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 #include "cmsis_os.h"
+#include "tim.h"
+#include "usart.h"
+#include "usb_device.h"
 #include "gpio.h"
 
 /* Private includes ----------------------------------------------------------*/
@@ -28,7 +31,8 @@
 
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
-
+volatile char sim;
+xUART_buf xInBuf;
 /* USER CODE END PTD */
 
 /* Private define ------------------------------------------------------------*/
@@ -45,6 +49,11 @@
 /* USER CODE BEGIN PV */
 led_parameters xLedRed;
 led_parameters xLedGreen;
+led_parameters xLedBlue;
+led_parameters xLedOrange;
+extern xSemaphoreHandle xCountingButtonSemaphore;
+extern xSemaphoreHandle xCountingUARTReceiveMsgSemaphore;
+xQueueHandle xQueueUARTMsg;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -56,7 +65,6 @@ void MX_FREERTOS_Init(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-
 /* USER CODE END 0 */
 
 /**
@@ -77,13 +85,25 @@ int main(void)
   /* USER CODE BEGIN Init */
 	xLedRed.port = led_red_GPIO_Port;
 	xLedRed.pin = led_red_Pin;
-	xLedRed.count = 5;
-	xLedRed.period = 1000;
+	xLedRed.count = 0;
+	xLedRed.period = 2000;
 
 	xLedGreen.port = led_green_GPIO_Port;
 	xLedGreen.pin = led_green_Pin;
-	xLedGreen.count = 2;
-	xLedGreen.period = 100;
+	xLedGreen.count = 0;
+	xLedGreen.period = 2000;
+
+	xLedBlue.port = led_blue_GPIO_Port;
+	xLedBlue.pin = led_blue_Pin;
+	xLedBlue.count = 0;
+	xLedBlue.period = 2000;
+
+	xLedOrange.port = led_orange_GPIO_Port;
+	xLedOrange.pin = led_orange_Pin;
+	xLedOrange.count = 0;
+	xLedOrange.period = 2000;
+
+	xInBuf.cnt = 0;
   /* USER CODE END Init */
 
   /* Configure the system clock */
@@ -95,6 +115,8 @@ int main(void)
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
+  MX_TIM2_Init();
+  MX_USART1_UART_Init();
   /* USER CODE BEGIN 2 */
 
   /* USER CODE END 2 */
@@ -107,6 +129,7 @@ int main(void)
   /* We should never get here as control is now taken by the scheduler */
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
+  HAL_UART_Receive_IT(&huart1, (uint8_t*)&sim, 1);
   while (1)
   {
     /* USER CODE END WHILE */
@@ -132,10 +155,16 @@ void SystemClock_Config(void)
   /** Initializes the RCC Oscillators according to the specified parameters
   * in the RCC_OscInitTypeDef structure.
   */
-  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI;
+  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI|RCC_OSCILLATORTYPE_HSE;
+  RCC_OscInitStruct.HSEState = RCC_HSE_ON;
   RCC_OscInitStruct.HSIState = RCC_HSI_ON;
   RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_DEFAULT;
-  RCC_OscInitStruct.PLL.PLLState = RCC_PLL_NONE;
+  RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
+  RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSE;
+  RCC_OscInitStruct.PLL.PLLM = 15;
+  RCC_OscInitStruct.PLL.PLLN = 144;
+  RCC_OscInitStruct.PLL.PLLP = RCC_PLLP_DIV2;
+  RCC_OscInitStruct.PLL.PLLQ = 5;
   if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
   {
     Error_Handler();
@@ -156,7 +185,14 @@ void SystemClock_Config(void)
 }
 
 /* USER CODE BEGIN 4 */
-
+void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
+	if(huart == &huart1) {
+		HAL_TIM_Base_Start_IT(&htim2);
+		TIM2->CNT = 0;
+		xInBuf.input_buffer[xInBuf.cnt++] = sim;
+		HAL_UART_Receive_IT(&huart1, (uint8_t*)&sim, 1);
+	}
+}
 /* USER CODE END 4 */
 
 /**
@@ -176,7 +212,12 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
     HAL_IncTick();
   }
   /* USER CODE BEGIN Callback 1 */
-
+  if (htim->Instance == TIM2) {
+	  HAL_TIM_Base_Stop_IT(htim);
+	  xSemaphoreGive(xCountingUARTReceiveMsgSemaphore);
+	  xQueueSend(xQueueUARTMsg, &xInBuf, 1/portTICK_RATE_MS);
+	  xInBuf.cnt = 0;
+  }
   /* USER CODE END Callback 1 */
 }
 
