@@ -33,6 +33,7 @@
 /* USER CODE BEGIN PTD */
 volatile char sim;
 xUART_buf xInBuf;
+uint8_t testUartBuf[15];
 /* USER CODE END PTD */
 
 /* Private define ------------------------------------------------------------*/
@@ -116,9 +117,9 @@ int main(void)
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
   MX_TIM2_Init();
-  MX_USART1_UART_Init();
+  MX_USART2_UART_Init();
   /* USER CODE BEGIN 2 */
-
+  HAL_UART_Receive_IT(&huart2, (uint8_t*)&sim, 1);
   /* USER CODE END 2 */
 
   /* Call init function for freertos objects (in freertos.c) */
@@ -129,7 +130,6 @@ int main(void)
   /* We should never get here as control is now taken by the scheduler */
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-  HAL_UART_Receive_IT(&huart1, (uint8_t*)&sim, 1);
   while (1)
   {
     /* USER CODE END WHILE */
@@ -186,11 +186,14 @@ void SystemClock_Config(void)
 
 /* USER CODE BEGIN 4 */
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
-	if(huart == &huart1) {
-		HAL_TIM_Base_Start_IT(&htim2);
-		TIM2->CNT = 0;
+	if(huart == &huart2) {
 		xInBuf.input_buffer[xInBuf.cnt++] = sim;
-		HAL_UART_Receive_IT(&huart1, (uint8_t*)&sim, 1);
+		HAL_UART_Receive_IT(&huart2, (uint8_t*)&sim, 1);
+		if (xInBuf.input_buffer[xInBuf.cnt-1] == '\n') {
+			//xSemaphoreGiveFromISR(xCountingUARTReceiveMsgSemaphore);
+			xQueueSendFromISR(xQueueUARTMsg, &xInBuf, 1/portTICK_RATE_MS);
+			xInBuf.cnt = 0;
+		}
 	}
 }
 /* USER CODE END 4 */
@@ -213,10 +216,6 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
   }
   /* USER CODE BEGIN Callback 1 */
   if (htim->Instance == TIM2) {
-	  HAL_TIM_Base_Stop_IT(htim);
-	  xSemaphoreGive(xCountingUARTReceiveMsgSemaphore);
-	  xQueueSend(xQueueUARTMsg, &xInBuf, 1/portTICK_RATE_MS);
-	  xInBuf.cnt = 0;
   }
   /* USER CODE END Callback 1 */
 }

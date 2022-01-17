@@ -38,7 +38,7 @@ extern "C" {
 /* USER CODE BEGIN ET */
 typedef struct {
 	uint8_t cnt;
-	uint8_t input_buffer[100];
+	uint8_t input_buffer[20];
 } xUART_buf;
 /* USER CODE END ET */
 

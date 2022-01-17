@@ -36,7 +36,7 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-#define NUM_OF_MSG_FROM_UART	10
+#define NUM_OF_MSG_FROM_UART	5
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -119,7 +119,7 @@ void MX_FREERTOS_Init(void) {
   /* USER CODE BEGIN RTOS_SEMAPHORES */
   /* add semaphores, ... */
 	xCountingButtonSemaphore = xSemaphoreCreateCounting(4,0);
-	xCountingUARTReceiveMsgSemaphore = xSemaphoreCreateCounting(10, 0);
+	xCountingUARTReceiveMsgSemaphore = xSemaphoreCreateCounting(5, 0);
 	xQueueUARTMsg = xQueueCreate(NUM_OF_MSG_FROM_UART, sizeof(xUART_buf));
   /* USER CODE END RTOS_SEMAPHORES */
 
