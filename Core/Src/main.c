@@ -52,9 +52,10 @@ led_parameters xLedRed;
 led_parameters xLedGreen;
 led_parameters xLedBlue;
 led_parameters xLedOrange;
-extern xSemaphoreHandle xCountingButtonSemaphore;
-extern xSemaphoreHandle xCountingUARTReceiveMsgSemaphore;
+xSemaphoreHandle xCountingButtonSemaphore;
+xSemaphoreHandle xCountingUARTReceiveMsgSemaphore;
 xQueueHandle xQueueUARTMsg;
+extern osTimerId uartTimerHandle;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -189,11 +190,8 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
 	if(huart == &huart2) {
 		xInBuf.input_buffer[xInBuf.cnt++] = sim;
 		HAL_UART_Receive_IT(&huart2, (uint8_t*)&sim, 1);
-		if (xInBuf.input_buffer[xInBuf.cnt-1] == '\n') {
-			//xSemaphoreGiveFromISR(xCountingUARTReceiveMsgSemaphore);
-			xQueueSendFromISR(xQueueUARTMsg, &xInBuf, 1/portTICK_RATE_MS);
-			xInBuf.cnt = 0;
-		}
+		osTimerStart(uartTimerHandle, 50);
+		//xTimerResetFromISR(uartTimerHandle, 50/portTICK_RATE_MS);
 	}
 }
 /* USER CODE END 4 */

@@ -46,15 +46,20 @@
 
 /* Private variables ---------------------------------------------------------*/
 /* USER CODE BEGIN Variables */
+extern UART_HandleTypeDef huart2;
+
 extern led_parameters xLedRed;
 extern led_parameters xLedGreen;
 extern led_parameters xLedBlue;
 extern led_parameters xLedOrange;
-xSemaphoreHandle xCountingButtonSemaphore;
-xSemaphoreHandle xCountingUARTReceiveMsgSemaphore;
+extern xSemaphoreHandle xCountingButtonSemaphore;
+extern xSemaphoreHandle xCountingUARTReceiveMsgSemaphore;
 extern xQueueHandle xQueueUARTMsg;
+extern xUART_buf xInBuf;
 /* USER CODE END Variables */
 osThreadId defaultTaskHandle;
+osThreadId uart_handlerHandle;
+osTimerId uartTimerHandle;
 
 /* Private function prototypes -----------------------------------------------*/
 /* USER CODE BEGIN FunctionPrototypes */
@@ -64,12 +69,17 @@ void buttonHandle(void *arg);
 /* USER CODE END FunctionPrototypes */
 
 void StartDefaultTask(void const * argument);
+void uartHandler(void const * argument);
+void uartTimerCallback(void const * argument);
 
 extern void MX_USB_DEVICE_Init(void);
 void MX_FREERTOS_Init(void); /* (MISRA C 2004 rule 8.1) */
 
 /* GetIdleTaskMemory prototype (linked to static allocation support) */
 void vApplicationGetIdleTaskMemory( StaticTask_t **ppxIdleTaskTCBBuffer, StackType_t **ppxIdleTaskStackBuffer, uint32_t *pulIdleTaskStackSize );
+
+/* GetTimerTaskMemory prototype (linked to static allocation support) */
+void vApplicationGetTimerTaskMemory( StaticTask_t **ppxTimerTaskTCBBuffer, StackType_t **ppxTimerTaskStackBuffer, uint32_t *pulTimerTaskStackSize );
 
 /* Hook prototypes */
 void vApplicationIdleHook(void);
@@ -102,6 +112,19 @@ void vApplicationGetIdleTaskMemory( StaticTask_t **ppxIdleTaskTCBBuffer, StackTy
 }
 /* USER CODE END GET_IDLE_TASK_MEMORY */
 
+/* USER CODE BEGIN GET_TIMER_TASK_MEMORY */
+static StaticTask_t xTimerTaskTCBBuffer;
+static StackType_t xTimerStack[configTIMER_TASK_STACK_DEPTH];
+
+void vApplicationGetTimerTaskMemory( StaticTask_t **ppxTimerTaskTCBBuffer, StackType_t **ppxTimerTaskStackBuffer, uint32_t *pulTimerTaskStackSize )
+{
+  *ppxTimerTaskTCBBuffer = &xTimerTaskTCBBuffer;
+  *ppxTimerTaskStackBuffer = &xTimerStack[0];
+  *pulTimerTaskStackSize = configTIMER_TASK_STACK_DEPTH;
+  /* place for user code */
+}
+/* USER CODE END GET_TIMER_TASK_MEMORY */
+
 /**
   * @brief  FreeRTOS initialization
   * @param  None
@@ -123,6 +146,11 @@ void MX_FREERTOS_Init(void) {
 	xQueueUARTMsg = xQueueCreate(NUM_OF_MSG_FROM_UART, sizeof(xUART_buf));
   /* USER CODE END RTOS_SEMAPHORES */
 
+  /* Create the timer(s) */
+  /* definition and creation of uartTimer */
+  osTimerDef(uartTimer, uartTimerCallback);
+  uartTimerHandle = osTimerCreate(osTimer(uartTimer), osTimerOnce, NULL);
+
   /* USER CODE BEGIN RTOS_TIMERS */
   /* start timers, add new ones, ... */
   /* USER CODE END RTOS_TIMERS */
@@ -135,6 +163,10 @@ void MX_FREERTOS_Init(void) {
   /* definition and creation of defaultTask */
   osThreadDef(defaultTask, StartDefaultTask, osPriorityNormal, 0, 128);
   defaultTaskHandle = osThreadCreate(osThread(defaultTask), NULL);
+
+  /* definition and creation of uart_handler */
+  osThreadDef(uart_handler, uartHandler, osPriorityNormal, 0, 128);
+  uart_handlerHandle = osThreadCreate(osThread(uart_handler), NULL);
 
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
@@ -169,6 +201,37 @@ void StartDefaultTask(void const * argument)
     osDelay(1);
   }
   /* USER CODE END StartDefaultTask */
+}
+
+/* USER CODE BEGIN Header_uartHandler */
+/**
+* @brief Function implementing the uart_handler thread.
+* @param argument: Not used
+* @retval None
+*/
+/* USER CODE END Header_uartHandler */
+void uartHandler(void const * argument)
+{
+  /* USER CODE BEGIN uartHandler */
+	xUART_buf xBuf;
+  /* Infinite loop */
+	while(1) {
+	  xSemaphoreTake(xCountingUARTReceiveMsgSemaphore, portMAX_DELAY);
+	  xQueueReceive(xQueueUARTMsg, &xBuf, 1/portTICK_RATE_MS);
+	  HAL_UART_Transmit(&huart2, (xBuf.input_buffer), xBuf.cnt, HAL_MAX_DELAY);
+	  HAL_UART_Transmit(&huart2, (uint8_t*)("\r\n"), 2, HAL_MAX_DELAY);
+	}
+  /* USER CODE END uartHandler */
+}
+
+/* uartTimerCallback function */
+void uartTimerCallback(void const * argument)
+{
+  /* USER CODE BEGIN uartTimerCallback */
+	xSemaphoreGive(xCountingUARTReceiveMsgSemaphore);
+	xQueueSend(xQueueUARTMsg, &xInBuf, 1/portTICK_RATE_MS);
+	xInBuf.cnt = 0;
+  /* USER CODE END uartTimerCallback */
 }
 
 /* Private application code --------------------------------------------------*/
